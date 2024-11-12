@@ -13,7 +13,7 @@
 # -------------------
 # build builder image
 # -------------------
-FROM openjdk:17-jdk-slim as builder
+FROM openjdk:17-jdk-slim AS builder
 
 USER root
 
@@ -36,6 +36,15 @@ COPY grobid-core/ ./grobid-core/
 COPY grobid-service/ ./grobid-service/
 COPY grobid-trainer/ ./grobid-trainer/
 
+# Copy the correct JAR file
+COPY ./grobid-service/build/libs/grobid-service-0.8.2-SNAPSHOT-onejar.jar app.jar
+
+# Expose the application's default port
+EXPOSE 8070
+
+# Run the JAR with the specified main manifest
+ENTRYPOINT ["java", "-Dserver.port=8070", "-jar", "app.jar"]
+
 # cleaning unused native libraries before packaging
 RUN rm -rf grobid-home/pdf2xml
 RUN rm -rf grobid-home/pdfalto/lin-32
@@ -49,7 +58,7 @@ RUN rm -rf grobid-home/lib/mac-64
 # cleaning Delft models
 RUN rm -rf grobid-home/models/*-BidLSTM_CRF*
 
-ENV GROBID_SERVICE_OPTS "-Djava.library.path=grobid-home/lib/lin-64:grobid-home/lib/lin-64/jep"
+ENV GROBID_SERVICE_OPTS="-Djava.library.path=grobid-home/lib/lin-64:grobid-home/lib/lin-64/jep"
 
 RUN ./gradlew clean assemble --no-daemon  --info --stacktrace
 
@@ -71,7 +80,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Add Tini
-ENV TINI_VERSION v0.19.0
+ENV TINI_VERSION=v0.19.0
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
 ENTRYPOINT ["/tini", "-s", "--"]
@@ -80,7 +89,7 @@ WORKDIR /opt/grobid
 
 COPY --from=builder /opt/grobid .
 
-ENV GROBID_SERVICE_OPTS "-Djava.library.path=grobid-home/lib/lin-64:grobid-home/lib/lin-64/jep --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED"
+ENV GROBID_SERVICE_OPTS="-Djava.library.path=grobid-home/lib/lin-64:grobid-home/lib/lin-64/jep --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED"
 
 CMD ["./grobid-service/bin/grobid-service"]
 

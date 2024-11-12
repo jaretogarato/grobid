@@ -1,8 +1,7 @@
 /.git
 /bin
-/build
-
-**/build
+#/build  # Commented out to include the build directory
+#**/build  # Commented out to ensure subdirectories like grobid-service/build/libs are included
 !**/pdf.js/build
 **/target
 
