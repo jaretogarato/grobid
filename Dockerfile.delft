@@ -15,7 +15,7 @@
 # build builder image
 # -------------------
 
-FROM openjdk:17-jdk-slim as builder
+FROM openjdk:17-jdk-slim AS builder
 
 USER root
 
@@ -24,6 +24,8 @@ RUN apt-get update && \
     apt-get -y --no-install-recommends install unzip
 
 WORKDIR /opt/grobid-source
+
+
 
 # gradle
 COPY gradle/ ./gradle/
@@ -37,6 +39,15 @@ COPY grobid-home/ ./grobid-home/
 COPY grobid-core/ ./grobid-core/
 COPY grobid-service/ ./grobid-service/
 COPY grobid-trainer/ ./grobid-trainer/
+
+# Copy the correct JAR file
+COPY ./grobid-service/build/libs/grobid-service-0.8.2-SNAPSHOT-onejar.jar app.jar
+
+# Expose the application's default port
+EXPOSE 8070
+
+# Run the JAR with the specified main manifest
+ENTRYPOINT ["java", "-Dserver.port=8070", "-jar", "app.jar"]
 
 # cleaning unused native libraries before packaging
 RUN rm -rf grobid-home/pdf2xml
@@ -69,7 +80,7 @@ RUN rm -rf grobid-source
 FROM tensorflow/tensorflow:2.7.0-gpu
 
 # setting locale is likely useless but to be sure
-ENV LANG C.UTF-8
+ENV LANG=C.UTF-8
 
 # update NVIDIA Cuda key (following a key rotation in April 2022)
 RUN apt-get install -y wget && \
@@ -80,7 +91,7 @@ RUN apt-get install -y wget && \
     dpkg -i cuda-keyring_1.0-1_all.deb
 
 # Add Tini
-ENV TINI_VERSION v0.19.0
+ENV TINI_VERSION=v0.19.0
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
 ENTRYPOINT ["/tini", "-s", "--"]
@@ -131,7 +142,7 @@ ENV LD_LIBRARY_PATH=/usr/local/lib/python3.8/dist-packages/jep:grobid-home/lib/l
 # remove libjep.so because we are providing our own version in the virtual env above
 RUN rm /opt/grobid/grobid-home/lib/lin-64/jep/libjep.so
 
-# preload embeddings, for GROBID all the RNN models use glove-840B (default for the script), ELMo is currently not loaded 
+# preload embeddings, for GROBID all the RNN models use glove-840B (default for the script), ELMo is currently not loaded
 # to be done: mechanism to download GROBID fine-tuned models based on SciBERT if selected (but not good enough for the moment)
 
 COPY --from=builder /opt/grobid-source/grobid-home/scripts/preload_embeddings.py .
@@ -142,7 +153,7 @@ RUN python3 preload_embeddings.py --registry ./resources-registry.json &&  \
 RUN mkdir delft && \
     cp ./resources-registry.json delft/
 
-ENV GROBID_SERVICE_OPTS "--add-opens java.base/java.lang=ALL-UNNAMED"
+ENV GROBID_SERVICE_OPTS="--add-opens java.base/java.lang=ALL-UNNAMED"
 
 CMD ["./grobid-service/bin/grobid-service"]
 
