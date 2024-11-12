@@ -54,7 +54,7 @@ subprojects {
         publications {
             mavenJava(MavenPublication) {
                 from components.java
-                //artifact jar 
+                //artifact jar
             }
         }
         repositories {
@@ -186,11 +186,11 @@ subprojects {
 
     test {
         useJUnitPlatform()
-        
+
         testLogging.showStandardStreams = true
         // enable for having separate test executor for different tests
         forkEvery = 1
-        maxHeapSize = "1024m"        
+        maxHeapSize = "1024m"
 
         def libraries = ""
         if (Os.isFamily(Os.FAMILY_MAC)) {
@@ -199,7 +199,7 @@ subprojects {
             } else {
                 libraries = "${file("./grobid-home/lib/mac-64").absolutePath}"
             }
-        } else if (Os.isFamily(Os.FAMILY_UNIX)) {            
+        } else if (Os.isFamily(Os.FAMILY_UNIX)) {
             def jepDir = rootProject.rootDir.getAbsolutePath() + "/grobid-home/lib/lin-64/jep"
             libraries = jepDir
             jepDir = rootProject.rootDir.getAbsolutePath() + "/grobid-home/lib/lin-64"
@@ -209,7 +209,7 @@ subprojects {
         }
 
         if (JavaVersion.current().compareTo(JavaVersion.VERSION_1_8) > 0) {
-            jvmArgs "--add-opens", "java.base/java.util.stream=ALL-UNNAMED", 
+            jvmArgs "--add-opens", "java.base/java.util.stream=ALL-UNNAMED",
             "--add-opens", "java.base/java.io=ALL-UNNAMED", "--add-opens", "java.xml/jdk.xml.internal=ALL-UNNAMED"
         }
         systemProperty "java.library.path","${System.getProperty('java.library.path')}:" + libraries
@@ -271,8 +271,11 @@ project("grobid-core") {
         archiveClassifier = 'onejar'
         mergeServiceFiles()
         zip64 true
+        //manifest {
+        //    attributes 'Main-Class': 'org.grobid.core.main.batch.GrobidMain'
+        //}
         manifest {
-            attributes 'Main-Class': 'org.grobid.core.main.batch.GrobidMain'
+            attributes 'Main-Class': 'org.grobid.service.main.GrobidServiceApplication'
         }
         from sourceSets.main.output
 
@@ -281,6 +284,9 @@ project("grobid-core") {
                 it.isDirectory() ? [] : localLibs.contains(it.getName()) ? zipTree(it) : []
             }
         }
+
+				destinationDirectory = file("$buildDir/libs")
+
 
         configurations = [project.configurations.shadedLib, project.configurations.runtimeClasspath]
         relocate 'org.apache.lucene', 'org.grobid.shaded.org.apache.lucene'
@@ -351,22 +357,13 @@ project(":grobid-service") {
         } else  {
             throw new RuntimeException("Unsupported platform!")
         }
-        
+
         if (JavaVersion.current().compareTo(JavaVersion.VERSION_1_8) > 0) {
             jvmArgs "--add-opens", "java.base/java.lang=ALL-UNNAMED"
         }
         workingDir = rootProject.rootDir
         def javaLibraryPath = "${System.getProperty('java.library.path')}:" + libraries
-//        if (System.env.CONDA_PREFIX) {
-//            def condaEnv = "${System.env.CONDA_PREFIX}/lib"
-//            def pythonDirectory = file(condaEnv).listFiles({ it.toString().contains("/lib/python") } as FileFilter)?.first()
-//            def pythonVersion = (pythonDirectory =~ /python([0-9]\.[0-9]+)/)[0][1]
-//
-//            javaLibraryPath = "${System.getProperty('java.library.path')}:" +
-//                libraries + ":" +
-//                "${System.env.CONDA_PREFIX}/lib:" +
-//                "${System.env.CONDA_PREFIX}/lib/python${pythonVersion}/site-packages/jep"
-//        }
+
         systemProperty "java.library.path", javaLibraryPath
     }
 
@@ -380,7 +377,7 @@ project(":grobid-service") {
     distTar { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }
 
     dependencies {
-        implementation project(':grobid-core') 
+        implementation project(':grobid-core')
         implementation project(':grobid-trainer')
 
         //Dropwizard
@@ -397,7 +394,7 @@ project(":grobid-service") {
         implementation 'io.dropwizard.metrics:metrics-core:4.2.22'
         implementation 'io.dropwizard.metrics:metrics-servlets:4.2.22'
         implementation 'io.dropwizard:dropwizard-json-logging:4.0.0'
-        
+
         implementation "org.apache.pdfbox:pdfbox:2.0.3"
         implementation "javax.activation:activation:1.1.1"
         implementation "io.prometheus:simpleclient_dropwizard:0.16.0"
@@ -409,7 +406,7 @@ project(":grobid-service") {
         mergeServiceFiles()
         zip64 true
         manifest {
-            attributes 'Main-Class': 'org.grobid.core.main.batch.GrobidMain'
+            attributes 'Main-Class': 'org.grobid.service.main.GrobidServiceApplication'
         }
 
         exclude("logback.xml")
@@ -520,7 +517,7 @@ project(":grobid-trainer") {
     def libraries = ""
     if (Os.isFamily(Os.FAMILY_MAC)) {
         if (Os.OS_ARCH.equals("aarch64")) {
-            libraries = "${file("../grobid-home/lib/mac_arm-64").absolutePath}"    
+            libraries = "${file("../grobid-home/lib/mac_arm-64").absolutePath}"
         } else {
             libraries = "${file("../grobid-home/lib/mac-64").absolutePath}"
         }
@@ -530,7 +527,7 @@ project(":grobid-trainer") {
     } else  {
         throw new RuntimeException("Unsupported platform!")
     }
-    
+
     trainerTasks.each { taskName, mainClassName ->
         tasks.create(name: taskName, type: JavaExec, group: 'modeltraining') {
             main = mainClassName
@@ -550,8 +547,8 @@ project(":grobid-trainer") {
     // ./gradlew jatsEval -Pp2t=/path/to/goldenSet
     // ./gradlew jatsEval -Pp2t=/path/to/goldenSet -Prun=1 -PfileRatio=0.1
     // ./gradlew teiEval -Pp2t=/path/to/goldenSet
-    // ./gradlew PrepareDOIMatching -Pp2t=ABS_PATH_TO_PMC/PMC_sample_1943 
-    // ./gradlew EvaluateDOIMatching -Pp2t=ABS_PATH_TO_PMC/PMC_sample_1943 
+    // ./gradlew PrepareDOIMatching -Pp2t=ABS_PATH_TO_PMC/PMC_sample_1943
+    // ./gradlew EvaluateDOIMatching -Pp2t=ABS_PATH_TO_PMC/PMC_sample_1943
     task(jatsEval, dependsOn: 'classes', type: JavaExec, group: 'modelevaluation') {
         main = 'org.grobid.trainer.evaluation.EndToEndEvaluation'
         classpath = sourceSets.main.runtimeClasspath
