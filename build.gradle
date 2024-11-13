@@ -338,7 +338,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 project(":grobid-service") {
     apply plugin: 'application'
-    apply plugin: 'jacoco'
+    //apply plugin: 'jacoco'
     apply plugin: 'com.github.johnrengelman.shadow'
 
     mainClassName = 'org.grobid.service.main.GrobidServiceApplication'
@@ -405,14 +405,28 @@ project(":grobid-service") {
         archiveClassifier = 'onejar'
         mergeServiceFiles()
         zip64 true
-        manifest {
-            attributes 'Main-Class': 'org.grobid.service.main.GrobidServiceApplication'
+        //manifest {
+        //    attributes 'Main-Class': 'org.grobid.service.main.GrobidServiceApplication'
+        //}
+				manifest {
+            attributes(
+                'Main-Class': 'org.grobid.service.main.GrobidServiceApplication',
+                'Implementation-Title': 'GROBID Service',
+                'Implementation-Version': project.version,
+                'Implementation-Vendor': 'GROBID'
+            )
         }
 
-        exclude("logback.xml")
+        //exclude("logback.xml")
+				exclude 'grobid-home/config/grobid.yaml'
+
+				mergeServiceFiles()
 
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
+
+		build.dependsOn shadowJar
+
 
     artifacts {
         archives shadowJar

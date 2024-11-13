@@ -1,4 +1,3 @@
-# Build stage
 FROM openjdk:17-jdk-slim AS builder
 
 USER root
@@ -10,12 +9,15 @@ RUN apt-get update && \
 
 WORKDIR /opt/grobid-source
 
-# Copy build files
+# Copy build files first to leverage Docker cache
 COPY gradle/ ./gradle/
 COPY gradlew ./
 COPY gradle.properties ./
 COPY build.gradle ./
 COPY settings.gradle ./
+
+# Make gradlew executable
+RUN chmod +x ./gradlew
 
 # Copy source directories
 COPY grobid-home/ ./grobid-home/
@@ -23,25 +25,21 @@ COPY grobid-core/ ./grobid-core/
 COPY grobid-service/ ./grobid-service/
 COPY grobid-trainer/ ./grobid-trainer/
 
-# Make gradlew executable
-RUN chmod +x ./gradlew
+# Build the service specifically
+RUN ./gradlew :grobid-service:shadowJar --no-daemon --info --stacktrace
 
-# Build the project
-RUN ./gradlew clean assemble shadowJar --no-daemon --info --stacktrace
-
-# Clean up unnecessary files
-RUN rm -rf grobid-home/pdf2xml \
-    grobid-home/pdfalto/lin-32 \
-    grobid-home/pdfalto/mac-64 \
-    grobid-home/pdfalto/mac_arm-64 \
-    grobid-home/pdfalto/win-* \
-    grobid-home/lib/lin-32 \
-    grobid-home/lib/win-* \
-    grobid-home/lib/mac-64 \
-    grobid-home/models/*-BidLSTM_CRF*
+# Verify the JAR exists and check its manifest
+RUN ls -la grobid-service/build/libs/
+RUN jar tvf grobid-service/build/libs/grobid-service-*-onejar.jar | grep MANIFEST
 
 # Runtime stage
 FROM openjdk:17-slim
+
+WORKDIR /opt/grobid
+
+# Copy only what's needed from the builder
+COPY --from=builder /opt/grobid-source/grobid-service/build/libs/grobid-service-*-onejar.jar /opt/grobid/app.jar
+COPY --from=builder /opt/grobid-source/grobid-home /opt/grobid/grobid-home
 
 # Install runtime dependencies
 RUN apt-get update && \
@@ -49,23 +47,17 @@ RUN apt-get update && \
     apt-get -y --no-install-recommends install libxml2 libfontconfig && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt/grobid
-
-# Copy built application
-COPY --from=builder /opt/grobid-source/grobid-service/build/libs/grobid-service-*-onejar.jar app.jar
-COPY --from=builder /opt/grobid-source/grobid-home grobid-home/
-
-# Set environment variables
+# Environment setup
 ENV GROBID_HOME=/opt/grobid/grobid-home
-ENV JAVA_OPTS="-Xmx4g"
-ENV GROBID_SERVICE_OPTS="-Djava.library.path=grobid-home/lib/lin-64:grobid-home/lib/lin-64/jep --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED"
-
-# Expose the port Railway expects
 ENV PORT=8070
 EXPOSE 8070
 
-# Command to run the application
-CMD java $JAVA_OPTS $GROBID_SERVICE_OPTS -jar app.jar server grobid-home/config/grobid.yaml
+# Java options
+ENV JAVA_OPTS="-Xmx4g"
+ENV GROBID_SERVICE_OPTS="-Djava.library.path=/opt/grobid/grobid-home/lib/lin-64:/opt/grobid/grobid-home/lib/lin-64/jep --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED"
+
+# Simple direct command to run the jar
+CMD ["sh", "-c", "java $JAVA_OPTS $GROBID_SERVICE_OPTS -jar /opt/grobid/app.jar server /opt/grobid/grobid-home/config/grobid.yaml"]
 
 ### Docker GROBID image
 
