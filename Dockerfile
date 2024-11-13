@@ -5,7 +5,7 @@ USER root
 # Install necessary tools
 RUN apt-get update && \
     apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install unzip
+    apt-get -y --no-install-recommends install unzip curl
 
 WORKDIR /opt/grobid-source
 
@@ -31,25 +31,37 @@ RUN ./gradlew clean :grobid-service:shadowJar --no-daemon --info --stacktrace
 # Runtime stage
 FROM openjdk:17-slim
 
+# Install curl for healthcheck
+RUN apt-get update && \
+    apt-get -y upgrade && \
+    apt-get -y --no-install-recommends install libxml2 libfontconfig curl && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /opt/grobid
 
 # Copy the jar and grobid-home
 COPY --from=builder /opt/grobid-source/grobid-service/build/libs/grobid-service-*-onejar.jar /opt/grobid/grobid-service.jar
 COPY --from=builder /opt/grobid-source/grobid-home /opt/grobid/grobid-home
 
-# Install runtime dependencies
-RUN apt-get update && \
-    apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install libxml2 libfontconfig && \
-    rm -rf /var/lib/apt/lists/*
-
 # Environment setup
 ENV GROBID_HOME=/opt/grobid/grobid-home
 ENV PORT=8070
+ENV JAVA_OPTS="-Xmx2g"
+ENV GROBID_SERVICE_OPTS="--add-opens java.base/java.lang=ALL-UNNAMED"
+
 EXPOSE 8070
 
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8070/api/version || exit 1
+
+# Create a startup script
+RUN echo '#!/bin/sh\n\
+java $JAVA_OPTS $GROBID_SERVICE_OPTS -jar /opt/grobid/grobid-service.jar server /opt/grobid/grobid-home/config/grobid.yaml\n'\
+> /opt/grobid/start.sh && chmod +x /opt/grobid/start.sh
+
 # The command that will run
-CMD ["java", "-jar", "/opt/grobid/grobid-service.jar", "server", "/opt/grobid/grobid-home/config/grobid.yaml"]
+CMD ["/opt/grobid/start.sh"]
 
 ### Docker GROBID image
 

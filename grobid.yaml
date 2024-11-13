@@ -1,0 +1,21 @@
+grobid:
+  grobidHome: "/opt/grobid/grobid-home"
+  delft:
+    runtime: "python"
+
+server:
+  type: simple
+  applicationContextPath: /
+  adminContextPath: /admin
+  connector:
+    type: http
+    port: 8070
+
+logging:
+  level: INFO
+  loggers:
+    org.grobid: INFO
+    org.apache: WARN
+  appenders:
+    - type: console
+      logFormat: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
