@@ -9,7 +9,7 @@ RUN apt-get update && \
 
 WORKDIR /opt/grobid-source
 
-# Copy build files first to leverage Docker cache
+# Copy build files first
 COPY gradle/ ./gradle/
 COPY gradlew ./
 COPY gradle.properties ./
@@ -25,20 +25,16 @@ COPY grobid-core/ ./grobid-core/
 COPY grobid-service/ ./grobid-service/
 COPY grobid-trainer/ ./grobid-trainer/
 
-# Build the service specifically
-RUN ./gradlew :grobid-service:shadowJar --no-daemon --info --stacktrace
-
-# Verify the JAR exists and check its manifest
-RUN ls -la grobid-service/build/libs/
-RUN jar tvf grobid-service/build/libs/grobid-service-*-onejar.jar | grep MANIFEST
+# Build the service jar
+RUN ./gradlew clean :grobid-service:shadowJar --no-daemon --info --stacktrace
 
 # Runtime stage
 FROM openjdk:17-slim
 
 WORKDIR /opt/grobid
 
-# Copy only what's needed from the builder
-COPY --from=builder /opt/grobid-source/grobid-service/build/libs/grobid-service-*-onejar.jar /opt/grobid/app.jar
+# Copy the jar and grobid-home
+COPY --from=builder /opt/grobid-source/grobid-service/build/libs/grobid-service-*-onejar.jar /opt/grobid/grobid-service.jar
 COPY --from=builder /opt/grobid-source/grobid-home /opt/grobid/grobid-home
 
 # Install runtime dependencies
@@ -52,12 +48,8 @@ ENV GROBID_HOME=/opt/grobid/grobid-home
 ENV PORT=8070
 EXPOSE 8070
 
-# Java options
-ENV JAVA_OPTS="-Xmx4g"
-ENV GROBID_SERVICE_OPTS="-Djava.library.path=/opt/grobid/grobid-home/lib/lin-64:/opt/grobid/grobid-home/lib/lin-64/jep --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED"
-
-# Simple direct command to run the jar
-CMD ["sh", "-c", "java $JAVA_OPTS $GROBID_SERVICE_OPTS -jar /opt/grobid/app.jar server /opt/grobid/grobid-home/config/grobid.yaml"]
+# The command that will run
+CMD ["java", "-jar", "/opt/grobid/grobid-service.jar", "server", "/opt/grobid/grobid-home/config/grobid.yaml"]
 
 ### Docker GROBID image
 
