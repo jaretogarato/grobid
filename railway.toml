@@ -1,12 +1,8 @@
-[
-build
-]
+[build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.crf"
+dockerfilePath = "Dockerfile"
 
-[
-deploy
-]
+[deploy]
 restartPolicyType = "ON_FAILURE"
 healthcheckPath = "/api/version"
 healthcheckTimeout = 300
