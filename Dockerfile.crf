@@ -37,6 +37,10 @@
 
 	# Copy the JAR file explicitly
 	COPY grobid-service/build/libs/grobid-service-0.8.2-SNAPSHOT-onejar.jar app.jar
+	RUN ls -lh app.jar && \
+    jar tf app.jar | grep META-INF/MANIFEST.MF && \
+    jar xf app.jar META-INF/MANIFEST.MF && \
+    cat META-INF/MANIFEST.MF
 
 	# Clean up unnecessary files
 	RUN rm -rf grobid-home/pdf2xml
