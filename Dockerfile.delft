@@ -43,6 +43,7 @@ COPY grobid-trainer/ ./grobid-trainer/
 # Copy the correct JAR file
 COPY ./grobid-service/build/libs/grobid-service-0.8.2-SNAPSHOT-onejar.jar app.jar
 
+
 # Expose the application's default port
 EXPOSE 8070
 
