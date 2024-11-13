@@ -31,7 +31,6 @@ RUN ./gradlew clean :grobid-service:shadowJar --no-daemon --info --stacktrace
 # Runtime stage
 FROM openjdk:17-slim
 
-# Install curl for healthcheck
 RUN apt-get update && \
     apt-get -y upgrade && \
     apt-get -y --no-install-recommends install libxml2 libfontconfig curl && \
@@ -47,18 +46,19 @@ COPY --from=builder /opt/grobid-source/grobid-home /opt/grobid/grobid-home
 ENV GROBID_HOME=/opt/grobid/grobid-home
 ENV PORT=8070
 ENV JAVA_OPTS="-Xmx2g"
-ENV GROBID_SERVICE_OPTS="--add-opens java.base/java.lang=ALL-UNNAMED"
+
+# Create startup script with debug output
+RUN echo '#!/bin/sh\n\
+echo "Starting GROBID service..."\n\
+echo "GROBID_HOME=$GROBID_HOME"\n\
+echo "PORT=$PORT"\n\
+echo "Java version:"\n\
+java -version\n\
+echo "Starting Java application..."\n\
+java $JAVA_OPTS -jar /opt/grobid/grobid-service.jar server /opt/grobid/grobid-home/config/grobid.yaml\n'\
+> /opt/grobid/start.sh && chmod +x /opt/grobid/start.sh
 
 EXPOSE 8070
-
-# Add healthcheck
-HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8070/api/version || exit 1
-
-# Create a startup script
-RUN echo '#!/bin/sh\n\
-java $JAVA_OPTS $GROBID_SERVICE_OPTS -jar /opt/grobid/grobid-service.jar server /opt/grobid/grobid-home/config/grobid.yaml\n'\
-> /opt/grobid/start.sh && chmod +x /opt/grobid/start.sh
 
 # The command that will run
 CMD ["/opt/grobid/start.sh"]
