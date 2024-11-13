@@ -1,103 +1,98 @@
 ## Docker GROBID image
 
-## Docker GROBID image using CRF models only - NOTE: you SHOULD use preferably the Deep Learning image
-
 ## See https://grobid.readthedocs.io/en/latest/Grobid-docker/
 
-## docker build -t grobid/grobid:GROBID_VERSION --build-arg GROBID_VERSION=GROBID_VERSION .
-## docker run -t --rm -p 8080:8070 -p 8081:8071 {image_name}
-
-# To connect to the container with a bash shell
-# > docker exec -i -t {container_name} /bin/bash
-
 # -------------------
-# build builder image
+# Build builder image
 # -------------------
-FROM openjdk:17-jdk-slim AS builder
+	FROM openjdk:17-jdk-slim AS builder
 
-USER root
+	USER root
 
-RUN apt-get update && \
-    apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install unzip
+	# Install necessary tools
+	RUN apt-get update && \
+			apt-get -y upgrade && \
+			apt-get -y --no-install-recommends install unzip
 
-WORKDIR /opt/grobid-source
+	WORKDIR /opt/grobid-source
 
-# gradle
-COPY gradle/ ./gradle/
-COPY gradlew ./
-COPY gradle.properties ./
-COPY build.gradle ./
-COPY settings.gradle ./
+	# Gradle and build configurations
+	COPY gradle/ ./gradle/
+	COPY gradlew ./
+	COPY gradle.properties ./
+	COPY build.gradle ./
+	COPY settings.gradle ./
 
-# source
-COPY grobid-home/ ./grobid-home/
-COPY grobid-core/ ./grobid-core/
-COPY grobid-service/ ./grobid-service/
-COPY grobid-trainer/ ./grobid-trainer/
+	# Source files
+	COPY grobid-home/ ./grobid-home/
+	COPY grobid-core/ ./grobid-core/
+	COPY grobid-service/ ./grobid-service/
+	COPY grobid-trainer/ ./grobid-trainer/
 
-# Copy the correct JAR file
-COPY ./grobid-service/build/libs/grobid-service-0.8.2-SNAPSHOT-onejar.jar app.jar
+	# Build the project
+	RUN ./gradlew clean assemble --no-daemon --info --stacktrace
 
-# Expose the application's default port
-EXPOSE 8070
+	# Debug: Confirm that the JAR file is in place
+	RUN find ./grobid-service/build/libs/
 
-# Run the JAR with the specified main manifest
-ENTRYPOINT ["java", "-Dserver.port=8070", "-jar", "app.jar"]
+	# Copy the JAR file explicitly
+	COPY grobid-service/build/libs/grobid-service-0.8.2-SNAPSHOT-onejar.jar app.jar
 
-# cleaning unused native libraries before packaging
-RUN rm -rf grobid-home/pdf2xml
-RUN rm -rf grobid-home/pdfalto/lin-32
-RUN rm -rf grobid-home/pdfalto/mac-64
-RUN rm -rf grobid-home/pdfalto/mac_arm-64
-RUN rm -rf grobid-home/pdfalto/win-*
-RUN rm -rf grobid-home/lib/lin-32
-RUN rm -rf grobid-home/lib/win-*
-RUN rm -rf grobid-home/lib/mac-64
+	# Clean up unnecessary files
+	RUN rm -rf grobid-home/pdf2xml
+	RUN rm -rf grobid-home/pdfalto/lin-32
+	RUN rm -rf grobid-home/pdfalto/mac-64
+	RUN rm -rf grobid-home/pdfalto/mac_arm-64
+	RUN rm -rf grobid-home/pdfalto/win-*
+	RUN rm -rf grobid-home/lib/lin-32
+	RUN rm -rf grobid-home/lib/win-*
+	RUN rm -rf grobid-home/lib/mac-64
 
-# cleaning Delft models
-RUN rm -rf grobid-home/models/*-BidLSTM_CRF*
+	# Remove unused models
+	RUN rm -rf grobid-home/models/*-BidLSTM_CRF*
 
-ENV GROBID_SERVICE_OPTS="-Djava.library.path=grobid-home/lib/lin-64:grobid-home/lib/lin-64/jep"
+	# Set environment variables
+	ENV GROBID_SERVICE_OPTS="-Djava.library.path=grobid-home/lib/lin-64:grobid-home/lib/lin-64/jep"
 
-RUN ./gradlew clean assemble --no-daemon  --info --stacktrace
+	# -------------------
+	# Build runtime image
+	# -------------------
+	FROM openjdk:17-slim
 
-WORKDIR /opt/grobid
-RUN unzip -o /opt/grobid-source/grobid-service/build/distributions/grobid-service-*.zip && \
-    mv grobid-service* grobid-service
-RUN unzip -o /opt/grobid-source/grobid-home/build/distributions/grobid-home-*.zip && \
-    chmod -R 755 /opt/grobid/grobid-home/pdfalto
-RUN rm -rf grobid-source
+	# Install runtime dependencies
+	RUN apt-get update && \
+			apt-get -y upgrade && \
+			apt-get -y --no-install-recommends install libxml2 libfontconfig && \
+			rm -rf /var/lib/apt/lists/*
 
-# -------------------
-# build runtime image
-# -------------------
-FROM openjdk:17-slim
+	# Add Tini for process management
+	ENV TINI_VERSION=v0.19.0
+	ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
+	RUN chmod +x /tini
 
-RUN apt-get update && \
-    apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install libxml2 libfontconfig && \
-    rm -rf /var/lib/apt/lists/*
+	# Set entry point using Tini
+	ENTRYPOINT ["/tini", "-s", "--", "java", "-Dserver.port=8070", "-jar", "app.jar"]
 
-# Add Tini
-ENV TINI_VERSION=v0.19.0
-ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
-RUN chmod +x /tini
-ENTRYPOINT ["/tini", "-s", "--"]
+	WORKDIR /opt/grobid
 
-WORKDIR /opt/grobid
+	# Copy the built files from the builder stage
+	COPY --from=builder /opt/grobid-source .
 
-COPY --from=builder /opt/grobid .
+	# Expose the application port
+	EXPOSE 8070
 
-ENV GROBID_SERVICE_OPTS="-Djava.library.path=grobid-home/lib/lin-64:grobid-home/lib/lin-64/jep --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED"
+	# Set environment variables for runtime
+	ENV GROBID_SERVICE_OPTS="-Djava.library.path=grobid-home/lib/lin-64:grobid-home/lib/lin-64/jep --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED"
 
-CMD ["./grobid-service/bin/grobid-service"]
+	# Set the default command to start the GROBID service
+	CMD ["./grobid-service/bin/grobid-service"]
 
-ARG GROBID_VERSION
+	# Optional metadata
+	ARG GROBID_VERSION
 
-LABEL \
-    authors="The contributors" \
-    org.label-schema.name="GROBID" \
-    org.label-schema.description="Image with GROBID service" \
-    org.label-schema.url="https://github.com/kermitt2/grobid" \
-    org.label-schema.version=${GROBID_VERSION}
+	LABEL \
+			authors="The contributors" \
+			org.label-schema.name="GROBID" \
+			org.label-schema.description="Image with GROBID service" \
+			org.label-schema.url="https://github.com/kermitt2/grobid" \
+			org.label-schema.version=${GROBID_VERSION}
